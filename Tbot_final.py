@@ -4,6 +4,8 @@ import shutil
 import glob
 import threading
 import time
+import asyncio
+import aiohttp
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -162,6 +164,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Нажмите 'Добавить данные', чтобы начать.",
         reply_markup=reply_markup,
     )
+import asyncio
+import aiohttp
+
+async def keep_alive():
+    api_url = f"https://api.telegram.org/bot<ваш_токен>/getMe"
+    while True:
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(api_url) as response:
+                    print(f"Telegram API ping: {response.status}")
+            except Exception as e:
+                print(f"Error during ping: {e}")
+        await asyncio.sleep(300)  # Пинг каждые 5 минут
+
+# Запуск keep-alive в рамках основного цикла событий
+async def main():
+    await asyncio.gather(
+        keep_alive(),
+        # Добавьте сюда вызов других асинхронных функций, если требуется
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
 
 async def send_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет файл пользователю."""
