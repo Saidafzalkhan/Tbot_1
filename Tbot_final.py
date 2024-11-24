@@ -126,7 +126,7 @@ async def keep_alive():
                     print(f"Telegram API ping: {response.status} - {datetime.now()}")
             except Exception as e:
                 print(f"Error during ping: {e}")
-        await asyncio.sleep(300)  # Пинг каждые 5 минут
+        await asyncio.sleep(5)  # Пинг каждые 5 минут
 
 def run_keep_alive_in_thread():
     """Запускает `keep_alive` в отдельном потоке."""
@@ -362,3 +362,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    asyncio.run(main())
