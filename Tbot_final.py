@@ -21,7 +21,7 @@ TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes
 if not TOKEN:
     raise ValueError("Необходимо установить TELEGRAM_BOT_TOKEN в переменные окружения.")
 
-ADMIN_IDS = [476571220]
+ADMIN_IDS = [476571220,39897938]
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 template_file = os.path.join(current_directory, "template.xlsx")
