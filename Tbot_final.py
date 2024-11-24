@@ -116,6 +116,26 @@ def clean_old_logs(retain_days: int = 30):
 
     with open(log_file, "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=2)
+async def keep_alive():
+    api_url = f"https://api.telegram.org/bot<ваш_токен>/getMe"
+    while True:
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(api_url) as response:
+                    print(f"Telegram API ping: {response.status}")
+            except Exception as e:
+                print(f"Error during ping: {e}")
+        await asyncio.sleep(300)  # Пинг каждые 5 минут
+
+# Запуск keep-alive в рамках основного цикла событий
+async def main():
+    await asyncio.gather(
+        keep_alive(),
+        # Добавьте сюда вызов других асинхронных функций, если требуется
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 async def send_log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет лог файл админу."""
@@ -164,31 +184,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Нажмите 'Добавить данные', чтобы начать.",
         reply_markup=reply_markup,
     )
-import asyncio
-import aiohttp
-
-async def keep_alive():
-    api_url = f"https://api.telegram.org/bot<ваш_токен>/getMe"
-    while True:
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(api_url) as response:
-                    print(f"Telegram API ping: {response.status}")
-            except Exception as e:
-                print(f"Error during ping: {e}")
-        await asyncio.sleep(300)  # Пинг каждые 5 минут
-
-# Запуск keep-alive в рамках основного цикла событий
-async def main():
-    await asyncio.gather(
-        keep_alive(),
-        # Добавьте сюда вызов других асинхронных функций, если требуется
-    )
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-
 async def send_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет файл пользователю."""
     user_id = update.effective_user.id
