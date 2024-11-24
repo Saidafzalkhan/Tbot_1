@@ -117,24 +117,37 @@ def clean_old_logs(retain_days: int = 30):
     with open(log_file, "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=2)
 async def keep_alive():
-    api_url = f"https://api.telegram.org/bot<ваш_токен>/getMe"
+    """Периодически пингует Telegram API, чтобы избежать разрывов соединения."""
+    api_url = f"https://api.telegram.org/bot{7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes1kL6hT4}/getMe"
     while True:
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(api_url) as response:
-                    print(f"Telegram API ping: {response.status}")
+                    print(f"Telegram API ping: {response.status} - {datetime.now()}")
             except Exception as e:
                 print(f"Error during ping: {e}")
         await asyncio.sleep(300)  # Пинг каждые 5 минут
 
-# Запуск keep-alive в рамках основного цикла событий
-async def main():
-    await asyncio.gather(
-        keep_alive(),
-        # Добавьте сюда вызов других асинхронных функций, если требуется
-    )
+def run_keep_alive_in_thread():
+    """Запускает `keep_alive` в отдельном потоке."""
+    def keep_alive_thread():
+        asyncio.run(keep_alive())  # Запускаем отдельный цикл событий для keep_alive
 
+    thread = threading.Thread(target=keep_alive_thread, daemon=True)
+    thread.start()
+
+# Основной вход в программу
 if __name__ == "__main__":
+    # Запускаем keep_alive в отдельном потоке
+    run_keep_alive_in_thread()
+
+    # Основной асинхронный процесс
+    async def main():
+        print("Запуск основного процесса...")
+        # Здесь ваш основной код для бота
+        while True:
+            await asyncio.sleep(1)  # Заглушка для бесконечного цикла
+
     asyncio.run(main())
 
 async def send_log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
