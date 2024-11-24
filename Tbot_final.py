@@ -118,7 +118,7 @@ def clean_old_logs(retain_days: int = 30):
         json.dump(filtered_data, f, ensure_ascii=False, indent=2)
 async def keep_alive():
     """Периодически пингует Telegram API, чтобы избежать разрывов соединения."""
-    api_url = f"https://api.telegram.org/bot{7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes1kL6hT4}/getMe"
+    api_url = f"https://api.telegram.org/7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes1kL6hT4/getMe"
     while True:
         async with aiohttp.ClientSession() as session:
             try:
@@ -135,20 +135,6 @@ def run_keep_alive_in_thread():
 
     thread = threading.Thread(target=keep_alive_thread, daemon=True)
     thread.start()
-
-# Основной вход в программу
-if __name__ == "__main__":
-    # Запускаем keep_alive в отдельном потоке
-    run_keep_alive_in_thread()
-
-    # Основной асинхронный процесс
-    async def main():
-        print("Запуск основного процесса...")
-        # Здесь ваш основной код для бота
-        while True:
-            await asyncio.sleep(1)  # Заглушка для бесконечного цикла
-
-    asyncio.run(main())
 
 async def send_log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет лог файл админу."""
@@ -343,18 +329,23 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_action(username, success=True)
 def main():
     application = Application.builder().token(TOKEN).build()
+
+    # Добавляем обработчики команд и взаимодействий с пользователями
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(add_data, pattern="add_data"))
     application.add_handler(CallbackQueryHandler(done, pattern="done"))
     application.add_handler(CallbackQueryHandler(send_file, pattern="send_file"))
-    application.add_handler(CallbackQueryHandler(send_log, pattern="send_log"))  # Обработчик для отправки лог файла
-    application.add_handler(CallbackQueryHandler(send_archive, pattern="send_archive"))  # Обработчик для отправки архива
+    application.add_handler(CallbackQueryHandler(send_log, pattern="send_log"))
+    application.add_handler(CallbackQueryHandler(send_archive, pattern="send_archive"))
     application.add_handler(CallbackQueryHandler(restart_process, pattern="restart"))
 
-    # Удаление старых логов и архивов при запуске
+    # Очистка старых логов и архивов при запуске
     clean_old_logs()
     clean_old_archives()
+
+    # Запуск функции keep-alive в отдельном потоке
+    run_keep_alive_in_thread()
 
     # Запуск планировщика для архивации старых файлов каждые 36 часов
     def schedule_archiving():
@@ -365,6 +356,7 @@ def main():
 
     threading.Thread(target=schedule_archiving, daemon=True).start()
 
+    # Запускаем бота с обработкой обновлений
     application.run_polling()
 
 
