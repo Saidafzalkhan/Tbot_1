@@ -11,7 +11,6 @@ from telegram.ext import Application
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application,
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
@@ -20,29 +19,31 @@ from telegram.ext import (
 )
 from openpyxl import load_workbook
 
-# Получение токена из переменной окружения
+# Константы
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes1kL6hT4')
 if not TOKEN:
     raise ValueError("Необходимо установить TELEGRAM_BOT_TOKEN в переменные окружения.")
-PORT = int(os.getenv("PORT", 8443))  # Render автоматически передает порт через переменную окружения
+PORT = int(os.getenv("PORT", 8443))
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = f"https://tbot-1-k0fj.onrender.com{WEBHOOK_PATH}"  # Замените <your-render-app-url> на URL Render
+WEBHOOK_URL = f"https://tbot-1-k0fj.onrender.com{WEBHOOK_PATH}"
 
-ADMIN_IDS = [476571220,39897938]
+ADMIN_IDS = [476571220, 39897938]  # ID админов
 
+# Директории и файлы
 current_directory = os.path.dirname(os.path.abspath(__file__))
 template_file = os.path.join(current_directory, "template.xlsx")
 output_file = os.path.join(current_directory, "output.xlsx")
 log_file = os.path.join(current_directory, "logs.json")
 archive_dir = os.path.join(current_directory, "archive")
 
+# Временные настройки
 reset_interval = timedelta(hours=36)
 last_reset_time = datetime.now()
 
 temp_data = {}
 
 QUESTIONS = [
-   ("Введите Описания.", "description"),
+    ("Введите Описания.", "description"),
     ("Введите количество.", "quantity"),
     ("Введите количество Диск отрезной 125х2.5мм", "disks_125"),
     ("Введите количество Диск отрезной 180х2.5мм", "disks_180"),
@@ -51,24 +52,20 @@ QUESTIONS = [
     ("Введите количество электродов 3 мм.", "electrodes_3mm"),
     ("Введите количество электродов ЛЭЗ УОНИ 13/55 Д-2,5 мм.", "electrodes_uoni"),
 ]
-
 def log_action(username: str, success: bool):
     """Логирует действие пользователя."""
     now = datetime.now()
-    date_str = now.strftime("%Y-%m-%d")  # Формат даты: 2024-11-24
-    day_of_week = now.strftime("%A")     # День недели: Monday
-    time_str = now.strftime("%H:%M:%S")  # Формат времени: 10:45:20
+    date_str = now.strftime("%Y-%m-%d")
+    day_of_week = now.strftime("%A")
+    time_str = now.strftime("%H:%M:%S")
 
-    # Определяем статус
     status = "Успешно" if success else "Ошибка"
 
-    # Загружаем текущие данные лога
     log_data = {}
     if os.path.exists(log_file):
         with open(log_file, "r", encoding="utf-8") as f:
             log_data = json.load(f)
 
-    # Обновляем данные для текущей даты
     if date_str not in log_data:
         log_data[date_str] = {day_of_week: []}
     elif day_of_week not in log_data[date_str]:
@@ -80,28 +77,22 @@ def log_action(username: str, success: bool):
         "status": status
     })
 
-    # Сохраняем изменения
     with open(log_file, "w", encoding="utf-8") as f:
         json.dump(log_data, f, ensure_ascii=False, indent=2)
 
-
 def archive_old_file():
-    """Архивирует старый файл и сохраняет его в архивную папку."""
+    """Архивирует старый файл."""
     if not os.path.exists(output_file):
         return
-
     if not os.path.exists(archive_dir):
         os.makedirs(archive_dir)
-
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     archive_name = os.path.join(archive_dir, f"output_{timestamp}.xlsx")
     shutil.copy2(output_file, archive_name)
 
-
 def clean_old_archives(retain_days: int = 7):
-    """Удаляет старые архивы, старше retain_days дней."""
-    cutoff_time = time.time() - (retain_days * 86400)  # 86400 секунд в сутках
-
+    """Удаляет старые архивы."""
+    cutoff_time = time.time() - (retain_days * 86400)
     for file_path in glob.glob(os.path.join(archive_dir, "output_*.xlsx")):
         if os.path.getmtime(file_path) < cutoff_time:
             os.remove(file_path)
@@ -110,302 +101,126 @@ def clean_old_logs(retain_days: int = 30):
     """Удаляет старые логи."""
     if not os.path.exists(log_file):
         return
-
     with open(log_file, "r", encoding="utf-8") as f:
         log_data = json.load(f)
-
     cutoff_date = (datetime.now() - timedelta(days=retain_days)).strftime("%Y-%m-%d")
-    filtered_data = {
-        date: logs for date, logs in log_data.items() if date >= cutoff_date
-    }
-
+    filtered_data = {date: logs for date, logs in log_data.items() if date >= cutoff_date}
     with open(log_file, "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=2)
-# Создаем приложение Telegram
-application = Application.builder().token(TOKEN).build()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /start."""
+    username = update.effective_user.username or "Unknown"
+    user_id = update.effective_user.id
+    greeting = (
+        f"Привет, {username}!\n"
+        "Я бот для заполнения таблиц. Вы можете ввести данные для последующего экспорта в Excel."
+    )
+    await update.message.reply_text(greeting)
 
-async def webhook_handler(request):
-    """Обработчик входящих запросов от Telegram."""
-    try:
-        update = await request.json()
-        await application.process_update(update)
-        return web.Response(status=200)
-    except Exception as e:
-        print(f"Ошибка обработки запроса: {e}")
-        return web.Response(status=500)
+async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начинает процесс добавления данных."""
+    username = update.effective_user.username or "Unknown"
+    user_id = update.effective_user.id
 
-async def on_startup(app):
-    """Действия при старте сервера."""
-    await application.bot.set_webhook(url=WEBHOOK_URL)
-    print(f"Webhook установлен: {WEBHOOK_URL}")
+    if user_id not in temp_data:
+        temp_data[user_id] = {"step": 0, "data": {}}
 
-async def on_shutdown(app):
-    """Действия при завершении работы сервера."""
-    await application.bot.delete_webhook()
-    print("Webhook удален")
+    step = temp_data[user_id]["step"]
+    question, field_name = QUESTIONS[step]
 
-# Настраиваем приложение aiohttp
-app = web.Application()
-app.router.add_post(WEBHOOK_PATH, webhook_handler)
-app.on_startup.append(on_startup)
-app.on_cleanup.append(on_shutdown)
+    await update.message.reply_text(question)
+    temp_data[user_id]["field_name"] = field_name
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает ответы пользователя."""
+    username = update.effective_user.username or "Unknown"
+    user_id = update.effective_user.id
+    message_text = update.message.text
+
+    if user_id not in temp_data:
+        await update.message.reply_text("Введите /add для начала ввода данных.")
+        return
+
+    step_data = temp_data[user_id]
+    field_name = step_data["field_name"]
+    step_data["data"][field_name] = message_text
+
+    if step_data["step"] + 1 < len(QUESTIONS):
+        step_data["step"] += 1
+        next_question, field_name = QUESTIONS[step_data["step"]]
+        step_data["field_name"] = field_name
+        await update.message.reply_text(next_question)
+    else:
+        # Завершение ввода данных
+        await save_data_to_excel(step_data["data"], username)
+        log_action(username, success=True)
+        del temp_data[user_id]
+        await update.message.reply_text("Данные успешно сохранены в таблице!")
+
+async def save_data_to_excel(data, username):
+    """Сохраняет данные пользователя в Excel."""
+    if not os.path.exists(output_file):
+        shutil.copy2(template_file, output_file)
+
+    workbook = load_workbook(output_file)
+    sheet = workbook.active
+    next_row = sheet.max_row + 1
+
+    sheet.cell(row=next_row, column=1, value=username)
+    for col_index, (_, field_value) in enumerate(data.items(), start=2):
+        sheet.cell(row=next_row, column=col_index, value=field_value)
+
+    workbook.save(output_file)
+    workbook.close()
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена текущего процесса ввода данных."""
+    user_id = update.effective_user.id
+    if user_id in temp_data:
+        del temp_data[user_id]
+        await update.message.reply_text("Ввод данных отменён.")
+    else:
+        await update.message.reply_text("Нет активного процесса ввода данных.")
 async def keep_alive():
-    """Пингует приложение каждые 2 минуты."""
+    """Keep-alive запросы для Render."""
     while True:
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://<your-render-app-url>") as response:
-                    print(f"Keep-alive: {response.status}")
+                async with session.get(WEBHOOK_URL) as response:
+                    if response.status == 200:
+                        print("Keep-alive успешен!")
         except Exception as e:
-            print(f"Keep-alive error: {e}")
-        await asyncio.sleep(120)
+            print(f"Ошибка keep-alive: {e}")
+        await asyncio.sleep(120)  # Период keep-alive запросов
 
-# Запустите keep-alive в отдельной задаче
-async def start_keep_alive():
-    asyncio.create_task(keep_alive())
-    print("Keep-alive запущен")
+async def webhook_handler(request):
+    """Обработчик входящих запросов для вебхука."""
+    data = await request.json()
+    await application.update_queue.put(Update.de_json(data, application.bot))
+    return web.Response(text="OK")
 
-def run_keep_alive_in_thread():
-    """Запускает `keep_alive` в отдельном потоке."""
-    def keep_alive_thread():
-        asyncio.run(keep_alive())  # Запускаем отдельный цикл событий для keep_alive
-
-    thread = threading.Thread(target=keep_alive_thread, daemon=True)
-    thread.start()
-app.on_startup.append(start_keep_alive)
-async def send_log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет лог файл админу."""
-    user_id = update.effective_user.id
-    if user_id in ADMIN_IDS:
-        try:
-            with open(log_file, "rb") as file:
-                await context.bot.send_document(chat_id=update.effective_chat.id, document=file)
-        except FileNotFoundError:
-            await update.callback_query.message.reply_text("Лог файл не найден.")
-        except Exception as e:
-            await update.callback_query.message.reply_text(f"Ошибка при отправке лог файла: {e}")
-    else:
-        await update.callback_query.message.reply_text("У вас нет прав для скачивания лог файла.")
-
-
-async def send_archive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет архив файлов пользователю."""
-    user_id = update.effective_user.id
-
-    if user_id in ADMIN_IDS:
-        try:
-            archive_files = glob.glob(os.path.join(archive_dir, "output_*.xlsx"))
-            if archive_files:
-                archive_zip = os.path.join(current_directory, "archive.zip")
-                with shutil.ZipFile(archive_zip, 'w') as zipf:
-                    for file in archive_files:
-                        zipf.write(file, os.path.basename(file))
-
-                await update.callback_query.answer()
-                with open(archive_zip, "rb") as file:
-                    await context.bot.send_document(chat_id=update.effective_chat.id, document=file)
-                os.remove(archive_zip)
-            else:
-                await update.callback_query.message.reply_text("Нет доступных архивов.")
-        except Exception as e:
-            await update.callback_query.message.reply_text(f"Ошибка при отправке архива: {e}")
-    else:
-        await update.callback_query.message.reply_text("У вас нет прав для скачивания архива.")
-# Основные функции бота
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = [[InlineKeyboardButton("Добавить данные", callback_data="add_data")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "Привет! Я бот для работы с таблицами.\n"
-        "Нажмите 'Добавить данные', чтобы начать.",
-        reply_markup=reply_markup,
-    )
-async def send_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет файл пользователю."""
-    user_id = update.effective_user.id
-
-    # Проверяем, имеет ли пользователь доступ
-    if user_id in ADMIN_IDS:
-        try:
-            # Проверяем существование файла
-            if os.path.exists(output_file):
-                await update.callback_query.answer()  # Закрываем анимацию ожидания
-                with open(output_file, "rb") as file:
-                    await context.bot.send_document(chat_id=update.effective_chat.id, document=file)
-            else:
-                await update.callback_query.message.reply_text("Файл не найден. Убедитесь, что он был создан.")
-        except Exception as e:
-            await update.callback_query.message.reply_text(f"Ошибка при отправке файла: {e}")
-    else:
-        await update.callback_query.message.reply_text("У вас нет прав для скачивания таблицы.")
-
-async def show_done_button(update: Update) -> None:
-    """Отображает кнопку 'Готово'."""
-    keyboard = [[InlineKeyboardButton("Готово", callback_data="done")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # Проверяем источник сообщения
-    if update.message:
-        await update.message.reply_text("Нажмите 'Готово', чтобы завершить.", reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.message.reply_text("Нажмите 'Готово', чтобы завершить.", reply_markup=reply_markup)
-
-async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    username = update.effective_user.username or f"user_{user_id}"
-    temp_data[user_id] = {'state': 0, 'data': {}}
-    await update.callback_query.answer()
-    await update.callback_query.message.reply_text(QUESTIONS[0][0])
-    log_action(username, success=True)
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    username = update.effective_user.username or f"user_{user_id}"
-
-    if user_id not in temp_data:
-        return
-
-    state = temp_data[user_id]['state']
-    if state >= len(QUESTIONS):
-        return
-
-    question, key = QUESTIONS[state]
-    user_input = update.message.text
-
-    if key != "description" and not user_input.isdigit():
-        await update.message.reply_text("Пожалуйста, введите корректное число.")
-        log_action(username, success=False)  # Логируем ошибку
-        return
-
-    temp_data[user_id]['data'][key] = user_input
-    temp_data[user_id]['state'] += 1
-
-    if temp_data[user_id]['state'] < len(QUESTIONS):
-        next_question = QUESTIONS[temp_data[user_id]['state']][0]
-        await update.message.reply_text(next_question)
-    else:
-        await show_done_button(update)
-
-async def restart_process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Сбрасывает данные пользователя и начинает заново."""
-    user_id = update.effective_user.id
-    if user_id in temp_data:
-        del temp_data[user_id]  # Очистить данные пользователя
-    await add_data(update, context)  # Сбросить процесс и начать заново
-
-
-async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    username = update.effective_user.username or f"user_{user_id}"
-
-    if user_id not in temp_data or not temp_data[user_id]['data']:
-        await update.callback_query.message.reply_text("Вы ещё не начали ввод данных.")
-        log_action(username, success=False)
-        return
-
-    try:
-        # Проверка наличия файла и его создание, если не существует
-        if not os.path.exists(output_file):
-            workbook = load_workbook(template_file)
-            sheet = workbook.active
-            workbook.save(output_file)
-        else:
-            workbook = load_workbook(output_file)
-            sheet = workbook.active
-    except FileNotFoundError:
-        await update.callback_query.message.reply_text("Шаблон таблицы не найден.")
-        log_action(username, success=False)
-        return
-
-    data = temp_data[user_id]['data']
-    row_index = 2
-
-    # Поиск первой строки, где все ячейки пусты
-    while any(sheet.cell(row=row_index, column=col).value is not None for col in range(2, sheet.max_column + 1)):
-        row_index += 1
-
-    row = [
-        None,
-        datetime.now().strftime("%d.%m.%Y г."),
-        data.get('description', ""),
-        None,
-        data.get('quantity', ""),
-        None,
-        None,
-        data.get('disks_125', ""),
-        data.get('disks_180', ""),
-        data.get('grinding_125', ""),
-        data.get('grinding_180', ""),
-        data.get('electrodes_3mm', ""),
-        data.get('electrodes_uoni', ""),
-    ]
-
-    for col_index, value in enumerate(row, start=1):
-        sheet.cell(row=row_index, column=col_index, value=value)
-
-    try:
-        # Архивируем старый файл
-        archive_old_file()
-        workbook.save(output_file)
-    except Exception as e:
-        await update.callback_query.message.reply_text(f"Ошибка при сохранении файла: {e}")
-        log_action(username, success=False)
-    finally:
-        workbook.close()
-
-    del temp_data[user_id]
-
-    keyboard = [
-        [InlineKeyboardButton("Скачать таблицу", callback_data="send_file")],
-        [InlineKeyboardButton("Скачать лог", callback_data="send_log")],  # Кнопка для скачивания лог файла
-        [InlineKeyboardButton("Скачать архив", callback_data="send_archive")],  # Кнопка для скачивания архива
-        [InlineKeyboardButton("Начать заново", callback_data="restart")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.message.reply_text("Таблица сформирована!", reply_markup=reply_markup)
-
-    log_action(username, success=True)
-def main():
-    application = Application.builder().token(TOKEN).build()
-    # Устанавливаем Webhook вместо Polling
-    webhook_url = f"https://tbot-1-k0fj.onrender.com/webhook"  # Замените на ваш URL
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8443)),  # Render передает порт через переменную окружения
-        url_path="webhook",
-        webhook_url=webhook_url,
-    )
-
-
-    # Добавляем обработчики команд и взаимодействий с пользователями
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CallbackQueryHandler(add_data, pattern="add_data"))
-    application.add_handler(CallbackQueryHandler(done, pattern="done"))
-    application.add_handler(CallbackQueryHandler(send_file, pattern="send_file"))
-    application.add_handler(CallbackQueryHandler(send_log, pattern="send_log"))
-    application.add_handler(CallbackQueryHandler(send_archive, pattern="send_archive"))
-    application.add_handler(CallbackQueryHandler(restart_process, pattern="restart"))
-
-    # Очистка старых логов и архивов при запуске
-    clean_old_logs()
-    clean_old_archives()
-
-    # Запуск функции keep-alive в отдельном потоке
-    run_keep_alive_in_thread()
-
-    # Запуск планировщика для архивации старых файлов каждые 36 часов
-    def schedule_archiving():
-        while True:
-            time.sleep(reset_interval.total_seconds())
-            archive_old_file()
-            clean_old_archives()
-
-    threading.Thread(target=schedule_archiving, daemon=True).start()
-
-    # Запускаем бота с обработкой обновлений
-    application.run_polling()
-
-
+def setup_webhook(app):
+    """Настройка вебхука."""
+    app.router.add_post(WEBHOOK_PATH, webhook_handler)
 if __name__ == "__main__":
-    main()
-    asyncio.run(main())
+    # Очистка старых архивов и логов
+    archive_old_file()
+    clean_old_archives()
+    clean_old_logs()
+
+    # Настройка Telegram Bot
+    application = Application.builder().token(TOKEN).build()
+
+    # Обработчики команд
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("add", add_data))
+    application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Запуск вебхука
+    loop = asyncio.get_event_loop()
+    loop.create_task(keep_alive())
+    web_app = web.Application()
+    setup_webhook(web_app)
+
+    web.run_app(web_app, host="0.0.0.0", port=PORT)
