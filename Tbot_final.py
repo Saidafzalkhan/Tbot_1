@@ -329,6 +329,15 @@ async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_action(username, success=True)
 def main():
     application = Application.builder().token(TOKEN).build()
+    # Устанавливаем Webhook вместо Polling
+    webhook_url = f"https://tbot-1-k0fj.onrender.com/webhook"  # Замените на ваш URL
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 8443)),  # Render передает порт через переменную окружения
+        url_path="webhook",
+        webhook_url=webhook_url,
+    )
+
 
     # Добавляем обработчики команд и взаимодействий с пользователями
     application.add_handler(CommandHandler("start", start))
