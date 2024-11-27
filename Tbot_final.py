@@ -149,7 +149,6 @@ app = web.Application()
 app.router.add_post(WEBHOOK_PATH, webhook_handler)
 app.on_startup.append(on_startup)
 app.on_cleanup.append(on_shutdown)
-app.on_startup.append(start_keep_alive)
 async def keep_alive():
     """Пингует приложение каждые 2 минуты."""
     while True:
@@ -173,7 +172,7 @@ def run_keep_alive_in_thread():
 
     thread = threading.Thread(target=keep_alive_thread, daemon=True)
     thread.start()
-
+app.on_startup.append(start_keep_alive)
 async def send_log(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет лог файл админу."""
     user_id = update.effective_user.id
