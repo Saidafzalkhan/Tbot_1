@@ -6,6 +6,8 @@ import threading
 import time
 import asyncio
 import aiohttp
+from aiohttp import web
+from telegram.ext import Application
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -22,6 +24,9 @@ from openpyxl import load_workbook
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes1kL6hT4')
 if not TOKEN:
     raise ValueError("Необходимо установить TELEGRAM_BOT_TOKEN в переменные окружения.")
+PORT = int(os.getenv("PORT", 8443))  # Render автоматически передает порт через переменную окружения
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"https://tbot-1-k0fj.onrender.com{WEBHOOK_PATH}"  # Замените <your-render-app-url> на URL Render
 
 ADMIN_IDS = [476571220,39897938]
 
@@ -116,17 +121,50 @@ def clean_old_logs(retain_days: int = 30):
 
     with open(log_file, "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=2)
+# Создаем приложение Telegram
+application = Application.builder().token(TOKEN).build()
+
+async def webhook_handler(request):
+    """Обработчик входящих запросов от Telegram."""
+    try:
+        update = await request.json()
+        await application.process_update(update)
+        return web.Response(status=200)
+    except Exception as e:
+        print(f"Ошибка обработки запроса: {e}")
+        return web.Response(status=500)
+
+async def on_startup(app):
+    """Действия при старте сервера."""
+    await application.bot.set_webhook(url=WEBHOOK_URL)
+    print(f"Webhook установлен: {WEBHOOK_URL}")
+
+async def on_shutdown(app):
+    """Действия при завершении работы сервера."""
+    await application.bot.delete_webhook()
+    print("Webhook удален")
+
+# Настраиваем приложение aiohttp
+app = web.Application()
+app.router.add_post(WEBHOOK_PATH, webhook_handler)
+app.on_startup.append(on_startup)
+app.on_cleanup.append(on_shutdown)
+app.on_startup.append(start_keep_alive)
 async def keep_alive():
-    """Периодически пингует Telegram API, чтобы избежать разрывов соединения."""
-    api_url = f"https://api.telegram.org/7514978498:AAF3uWbaKRRaUTrY6g8McYMVsJes1kL6hT4/getMe"
+    """Пингует приложение каждые 2 минуты."""
     while True:
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(api_url) as response:
-                    print(f"Telegram API ping: {response.status} - {datetime.now()}")
-            except Exception as e:
-                print(f"Error during ping: {e}")
-        await asyncio.sleep(120)  # Пинг каждые 2 минут
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://<your-render-app-url>") as response:
+                    print(f"Keep-alive: {response.status}")
+        except Exception as e:
+            print(f"Keep-alive error: {e}")
+        await asyncio.sleep(120)
+
+# Запустите keep-alive в отдельной задаче
+async def start_keep_alive():
+    asyncio.create_task(keep_alive())
+    print("Keep-alive запущен")
 
 def run_keep_alive_in_thread():
     """Запускает `keep_alive` в отдельном потоке."""
